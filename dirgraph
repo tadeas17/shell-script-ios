@@ -1,0 +1,138 @@
+#!/bin/sh
+export POSIXLY_CORRECT=yes
+
+sizeInHistorograph()
+{
+    [ $1 -eq 0 ] && return
+
+    if [ $2 -eq 0 ]
+    then
+        SIZE_COUNT=$1
+    else
+        SIZE_COUNT=$(($2 * $1 / $3))
+    fi
+    
+    for i in $(seq 1 $SIZE_COUNT) 
+    do
+        echo -n \#
+    done 
+}
+
+permCheck()
+{
+    if [ $1 -eq 1 ]; then
+        echo "You dont have premission to every file or directory." >&2
+        exit 1
+    fi
+}
+
+NORMALIZATION=0
+WHERE="."
+HISTOROGRAPH_WIDTH=0
+FILE_ERE=""
+EXCLUDE=""
+DIR_PRINT=""
+
+while getopts "i:n" PARAMS; do
+
+	case $PARAMS in
+	i) 
+		FILE_ERE=${OPTARG}
+		;;
+	n)
+		NORMALIZATION=1
+		;;
+	?) 
+		echo "$0 Usage: [-i FILE_ERE] [-n] [DIR]" >&2
+		exit 1
+		;;
+	esac
+done
+
+shift $(($OPTIND - 1))	
+[ $# -gt 1 ] && echo "$0 Usage: [-i FILE_ERE] [-n] [DIR]" >&2 && exit 1
+
+if [ -n "$1" ]
+then
+    if [ -d "$1" ]; then
+        WHERE=$1
+	DIR_PRINT=$1
+    else
+        echo "Path $1 is not valid."
+        exit 1
+    fi
+fi
+
+if [ $NORMALIZATION -eq "1" ]; then 
+    [ -t 1 ] && HISTOROGRAPH_WIDTH=$((`tput cols` - 13)) || HISTOROGRAPH_WIDTH=63
+fi
+
+
+if [ "$FILE_ERE" != "" ]
+then
+    LONG_FILES=`find $WHERE ! -name \*"$FILE_ERE"\* ! -path \*"$FILE_ERE"\* -type f -ls 2>/dev/null | awk '{print $7}'`
+    permCheck $?
+    COUNT_DIRESTORY=`find $WHERE ! -name \*"$FILE_ERE"\* ! -path \*"$FILE_ERE"\* -type d 2>/dev/null | wc -l`
+    permCheck $?
+else
+    LONG_FILES=`find $WHERE -type f -ls 2>/dev/null | awk '{print $7}'`
+    permCheck $?
+    COUNT_DIRESTORY=`find $WHERE -type d 2>/dev/null | wc -l`
+    permCheck $?
+fi
+
+[ -z $DIR_PRINT ] && DIR_PRINT=$PWD
+echo "Root directory: $DIR_PRINT"
+echo "Directories: $COUNT_DIRESTORY"
+echo "All files: `echo "$LONG_FILES" | wc -w`"
+
+LESS_100B=0
+LESS_1KiB=0
+LESS_10KiB=0
+LESS_100KiB=0
+LESS_1MiB=0
+LESS_10MiB=0
+LESS_100MiB=0
+LESS_1GiB=0
+MORE_1GiB=0
+
+for i in $LONG_FILES
+do
+    [ "$i" -lt "100" ] && LESS_100B=$(($LESS_100B+1)) && continue
+    [ "$i" -lt "1024" ] && LESS_1KiB=$(($LESS_1KiB+1)) && continue
+    [ "$i" -lt "10240" ] && LESS_10KiB=$(($LESS_10KiB+1)) && continue
+    [ "$i" -lt "102400" ] && LESS_100KiB=$(($LESS_100KiB+1)) && continue
+    [ "$i" -lt "1048576" ] && LESS_1MiB=$(($LESS_1MiB+1)) && continue
+    [ "$i" -lt "10485760" ] && LESS_10MiB=$(($LESS_10MiB+1)) && continue
+    [ "$i" -lt "104857600" ] && LESS_100MiB=$(($LESS_100MiB+1)) && continue
+    [ "$i" -lt "1073741824" ] && LESS_1GiB=$(($LESS_1GiB+1)) && continue
+    ((MORE_1GiB=MORE_1GiB+1))
+    echo $i
+done
+
+MAX_COUNT=$LESS_100B
+
+if [ $NORMALIZATION -eq 1 ]; then
+    [ $MAX_COUNT -ge $LESS_1KiB ] || MAX_COUNT=$LESS_1KiB
+    [ $MAX_COUNT -ge $LESS_10KiB ] || MAX_COUNT=$LESS_10KiB
+    [ $MAX_COUNT -ge $LESS_100KiB ] || MAX_COUNT=$LESS_100KiB
+    [ $MAX_COUNT -ge $LESS_1MiB ] || MAX_COUNT=$LESS_1MiB
+    [ $MAX_COUNT -ge $LESS_10MiB ] || MAX_COUNT=$LESS_10MiB
+    [ $MAX_COUNT -ge $LESS_100MiB ] || MAX_COUNT=$LESS_100MiB
+    [ $MAX_COUNT -ge $LESS_1GiB ] || MAX_COUNT=$LESS_1GiB
+    [ $MAX_COUNT -ge $MORE_1GiB ] || MAX_COUNT=$MORE_1GiB
+    [ $MAX_COUNT -eq "0" ] && MAX_COUNT=1
+fi
+
+echo "File size histogram:"
+echo "  <100 B  :" `sizeInHistorograph $LESS_100B $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <1 KiB  :" `sizeInHistorograph $LESS_1KiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <10 KiB :" `sizeInHistorograph $LESS_10KiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <100 KiB:" `sizeInHistorograph $LESS_100KiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <1 MiB  :" `sizeInHistorograph $LESS_1MiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <10 MiB :" `sizeInHistorograph $LESS_10MiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <100 MiB:" `sizeInHistorograph $LESS_100MiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  <1 GiB  :" `sizeInHistorograph $LESS_1GiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+echo "  >=1 GiB :" `sizeInHistorograph $MORE_1GiB $HISTOROGRAPH_WIDTH $MAX_COUNT`
+
+exit 0 
